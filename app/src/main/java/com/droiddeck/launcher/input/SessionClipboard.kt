@@ -7,11 +7,14 @@ import android.os.Handler
 import android.os.Looper
 import android.system.Os
 import android.util.Log
+import android.widget.Toast
+import com.droiddeck.launcher.R
 import com.droiddeck.launcher.wayland.WaylandCompositor
 import java.io.File
 import java.io.IOException
 
 class SessionClipboard(context: Context, private val hasFocus: () -> Boolean) {
+    private val appContext = context.applicationContext
     private val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
     private val handler = Handler(Looper.getMainLooper())
     private val hostFile = File(context.filesDir, "session/android-clipboard")
@@ -24,13 +27,26 @@ class SessionClipboard(context: Context, private val hasFocus: () -> Boolean) {
         override fun onGuestClipboardText(text: String) {
             handler.post {
                 if (active && hasFocus() && WaylandCompositor.isClipboardListener(this)) {
-                    val current = clipboard.primaryClip?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.text
-                    shared = text
-                    published = true
+                    if (ClipboardText.encode(text) == null) {
+                        notice(R.string.custom_clipboard_too_large)
+                        return@post
+                    }
+                    val current = try {
+                        clipboard.primaryClip?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.text
+                    } catch (_: RuntimeException) { null }
                     if (current?.toString() != text) {
                         echo = text
-                        clipboard.setPrimaryClip(ClipData.newPlainText("DroidDeck", text))
+                        if (!ClipboardText.writeSafely(text) {
+                            clipboard.setPrimaryClip(ClipData.newPlainText("DroidDeck", it))
+                        }) {
+                            echo = null
+                            Log.w("SessionClipboard", "Android rejected clipboard synchronization")
+                            notice(R.string.custom_clipboard_android_rejected)
+                            return@post
+                        }
                     }
+                    shared = text
+                    published = true
                 }
             }
         }
@@ -54,7 +70,10 @@ class SessionClipboard(context: Context, private val hasFocus: () -> Boolean) {
 
     fun refresh(changed: Boolean = false) {
         if (!active || !hasFocus()) return
-        val clip = clipboard.primaryClip
+        val clip = try { clipboard.primaryClip } catch (e: RuntimeException) {
+            Log.w("SessionClipboard", "Android clipboard is not currently accessible", e)
+            return
+        }
         if (clip != null && clip.itemCount == 0) return
         val text = clip?.getItemAt(0)?.text?.toString()
         if (echo != null && text == echo) {
@@ -69,11 +88,13 @@ class SessionClipboard(context: Context, private val hasFocus: () -> Boolean) {
     private fun publish(text: String?) {
         published = true
         shared = text
-        WaylandCompositor.setClipboardText(text)
+        val encoded = ClipboardText.encode(text)
+        if (encoded == null) notice(R.string.custom_clipboard_too_large)
+        WaylandCompositor.setClipboardText(if (encoded == null) null else text)
         val pending = File(hostFile.parentFile, "android-clipboard.pending")
         try {
             hostFile.parentFile?.mkdirs()
-            pending.writeText(text.orEmpty(), Charsets.UTF_8)
+            pending.writeBytes(encoded ?: byteArrayOf())
             Os.rename(pending.path, hostFile.path)
         } catch (e: IOException) {
             Log.w("SessionClipboard", "Could not share text with Xwayland", e)
@@ -82,5 +103,9 @@ class SessionClipboard(context: Context, private val hasFocus: () -> Boolean) {
         } finally {
             pending.delete()
         }
+    }
+
+    private fun notice(message: Int) {
+        Toast.makeText(appContext, message, Toast.LENGTH_LONG).show()
     }
 }

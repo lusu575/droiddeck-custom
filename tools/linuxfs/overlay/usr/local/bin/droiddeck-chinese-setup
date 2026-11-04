@@ -1,9 +1,118 @@
 #!/bin/bash
 set -eu
 config=${XDG_CONFIG_HOME:-$HOME/.config}
-mkdir -p "$config/fcitx5" "$config/autostart"
-if [ ! -e "$config/fcitx5/profile" ]; then
-  cat > "$config/fcitx5/profile" <<'PROFILE'
+data=${XDG_DATA_HOME:-$HOME/.local/share}
+
+apt_candidate() {
+  LC_ALL=C apt-cache policy "$1" 2>/dev/null | awk '
+    $1 == "Candidate:" && $2 != "(none)" { found=1 }
+    END { exit !found }'
+}
+
+check_support() {
+  local missing=0 fonts package
+  printf 'Chinese desktop support / 中文桌面支持\nLANG=%s\nLANGUAGE=%s\n' "${LANG:-unset}" "${LANGUAGE:-unset}"
+  if command -v fcitx5 >/dev/null 2>&1; then
+    echo 'Fcitx 5: installed / 已安装'
+  else
+    echo 'Fcitx 5: missing / 未安装（Android 键盘仍可使用）'; missing=1
+  fi
+  if [ -f /usr/share/fcitx5/inputmethod/pinyin.conf ]; then
+    echo 'Pinyin: installed / 已安装'
+  else
+    echo 'Pinyin: missing / 未安装'; missing=1
+  fi
+  fonts=$(fc-list ':lang=zh-cn' family 2>/dev/null || true)
+  if [ -n "$fonts" ]; then
+    printf 'Chinese fonts / 中文字体:\n%s\n' "$fonts"
+  else
+    echo 'Chinese fonts: missing / 未发现中文字体'; missing=1
+  fi
+  if locale -a 2>/dev/null | grep -Eiq '^zh_CN\.(utf8|utf-8)$'; then
+    echo 'Simplified Chinese locale: available / 简体中文区域设置可用'
+  else
+    echo 'Simplified Chinese locale: missing / 缺少 zh_CN.UTF-8，请使用发行版 locale 工具配置'; missing=1
+  fi
+  if [ -d /usr/share/locale/zh_CN/LC_MESSAGES ] &&
+     find /usr/share/locale/zh_CN/LC_MESSAGES -name '*.mo' -print -quit | grep -q .; then
+    echo 'Chinese translation catalogs: present / 存在中文翻译目录（不代表每个应用已翻译）'
+  else
+    echo 'Chinese translation catalogs: missing / 未发现中文翻译目录'; missing=1
+  fi
+  if command -v apt-cache >/dev/null 2>&1; then
+    echo 'Translation packages available in cached repository metadata / 本地软件源缓存中可用的翻译包：'
+    for package in language-pack-zh-hans language-pack-gnome-zh-hans language-pack-kde-zh-hans kde-l10n-zhcn; do
+      if apt_candidate "$package"; then printf '  %s\n' "$package"; fi
+    done
+    echo 'Debian / Arch 的 KDE 翻译通常随应用包提供；被精简的翻译目录不能只靠切换 LANG 恢复。'
+  fi
+  if [ -f "$config/fcitx5/profile" ] && ! grep -q '^Name=pinyin$' "$config/fcitx5/profile"; then
+    echo '已有输入法配置不含拼音；保留原配置，请在 Fcitx 设置中添加 Pinyin。'
+  fi
+  echo '若旧桌面仍显示英文，可在本启动项的附加动作中选择“使用应用选择的语言”。'
+  echo 'GTK / Qt frontends and individual application support must be checked in the desktop.'
+  echo 'GTK / Qt 输入法模块及具体应用兼容性仍需在桌面中测试。'
+  return "$missing"
+}
+
+install_interactive() {
+  local answer package pair
+  local optional_packages=()
+  check_support || true
+  echo
+  echo 'This installs Chinese locale, fonts and Fcitx 5 from the configured distribution repositories.'
+  echo '将从当前发行版的软件源下载中文区域设置、字体、可用翻译包和 Fcitx 5，不安装完整 Linux 环境。'
+  if command -v apt-get >/dev/null 2>&1; then
+    echo 'Ubuntu/Debian: apt-get update; apt-get install locales fonts-noto-cjk fcitx5 fcitx5-chinese-addons fcitx5-frontend-gtk3 fcitx5-frontend-qt5'
+    echo '同时检测当前源可用的中文翻译包及 Qt 6 / GTK 4 模块；不会强制安装 Ubuntu 专属包。'
+    echo '软件源必须由你信任；安装器会再次显示下载量、磁盘空间和变更列表。'
+  elif command -v pacman >/dev/null 2>&1; then
+    echo 'Arch: pacman -Syu --needed noto-fonts-cjk fcitx5 fcitx5-chinese-addons fcitx5-gtk fcitx5-qt'
+    echo '注意：Arch 需要完整系统更新以避免部分升级，可能下载较多内容。'
+  else
+    echo 'No supported package manager. Install Chinese fonts and Fcitx 5 with your distribution tools.'
+    return 1
+  fi
+  [ -t 0 ] || { echo 'Open this action in a terminal; non-interactive installation is disabled.'; return 1; }
+  printf '输入 INSTALL 继续，或直接回车取消 / Type INSTALL to continue: '
+  read -r answer || return 1
+  [ "$answer" = INSTALL ] || { echo 'Cancelled / 已取消'; return 0; }
+  [ "$(id -u)" = 0 ] || { echo '请在 DroidDeck Linux 桌面的 root 会话执行；不会自动提权。'; return 1; }
+  if command -v apt-get >/dev/null 2>&1; then
+    apt-get update || return 1
+    for package in fcitx5-frontend-gtk4 fcitx5-frontend-qt6 language-pack-zh-hans \
+        language-pack-gnome-zh-hans language-pack-kde-zh-hans kde-l10n-zhcn; do
+      if apt_candidate "$package"; then optional_packages+=("$package"); fi
+    done
+    for pair in firefox-esr:firefox-esr-l10n-zh-cn libreoffice-core:libreoffice-l10n-zh-cn; do
+      if [ "$(dpkg-query -W -f='${Status}' "${pair%%:*}" 2>/dev/null || true)" = 'install ok installed' ] &&
+         apt_candidate "${pair#*:}"; then optional_packages+=("${pair#*:}"); fi
+    done
+    apt-get install locales fonts-noto-cjk fcitx5 fcitx5-chinese-addons fcitx5-frontend-gtk3 fcitx5-frontend-qt5 "${optional_packages[@]}" || return 1
+    echo '已包含软件源中可用的 Qt 6 / GTK 4 模块；未提供相应模块的应用可能只能使用 Android 键盘。'
+  else
+    pacman -Syu --needed noto-fonts-cjk fcitx5 fcitx5-chinese-addons fcitx5-gtk fcitx5-qt || return 1
+  fi
+  if ! locale -a 2>/dev/null | grep -Eiq '^zh_CN\.(utf8|utf-8)$'; then
+    if command -v localedef >/dev/null 2>&1; then
+      DROIDDECK_LINK_RENAME=1 localedef -i zh_CN -f UTF-8 zh_CN.UTF-8 || {
+        echo 'zh_CN.UTF-8 生成失败；请保存终端输出以便排查。'; return 1;
+      }
+    fi
+  fi
+  configure_input
+  fc-cache -f || true
+  check_support || return 1
+  echo '请退出并重新进入桌面。Fcitx 默认使用 Ctrl+Space 切换拼音；Android 键盘继续独立可用。'
+}
+
+configure_input() {
+  mkdir -p "$config/fcitx5" "$config/autostart" "$config/droiddeck" "$data/applications"
+  if [ ! -e "$config/fcitx5/profile" ] ||
+     { [ ! -e "$config/droiddeck/input-profile-initialized" ] &&
+       [ -f /etc/skel/.config/fcitx5/profile ] &&
+       cmp -s /etc/skel/.config/fcitx5/profile "$config/fcitx5/profile"; }; then
+    cat > "$config/fcitx5/profile" <<'PROFILE'
 [Groups/0]
 Name=Default
 Default Layout=us
@@ -17,9 +126,10 @@ Layout=
 [GroupOrder]
 0=Default
 PROFILE
-fi
-if command -v fcitx5 >/dev/null 2>&1; then
-  cat > "$config/autostart/droiddeck-fcitx5.desktop" <<'ENTRY'
+  fi
+  : > "$config/droiddeck/input-profile-initialized"
+  if command -v fcitx5 >/dev/null 2>&1 && [ ! -e "$config/autostart/droiddeck-fcitx5.desktop" ]; then
+    cat > "$config/autostart/droiddeck-fcitx5.desktop" <<'ENTRY'
 [Desktop Entry]
 Type=Application
 Name=Chinese input
@@ -28,4 +138,59 @@ Exec=fcitx5 -d --disable=waylandim
 OnlyShowIn=KDE;
 X-KDE-autostart-after=panel
 ENTRY
-fi
+  fi
+  cat > "$data/applications/droiddeck-chinese-support.desktop" <<'ENTRY'
+[Desktop Entry]
+Type=Application
+Name=Chinese desktop support
+Name[zh_CN]=中文支持检查与安装
+Comment=Check Chinese fonts and input; install missing support only after confirmation
+Comment[zh_CN]=检查中文字体与输入法，确认后联网安装缺少的组件
+Exec=konsole --hold -e /usr/local/bin/droiddeck-chinese-setup --interactive
+Icon=preferences-desktop-locale
+Categories=Settings;System;
+Actions=UseAppLanguage;
+
+[Desktop Action UseAppLanguage]
+Name=Use the app language
+Name[zh_CN]=使用应用选择的语言
+Exec=konsole --hold -e /usr/local/bin/droiddeck-chinese-setup --use-app-language
+ENTRY
+}
+
+configure_locale() {
+  local requested="${LANG:-zh_CN.UTF-8}|${LANGUAGE:-}" stamp="$config/droiddeck/desktop-language"
+  command -v kwriteconfig6 >/dev/null 2>&1 || return 0
+  mkdir -p "$config/droiddeck"
+  local stock=0
+  if [ -f /etc/skel/.config/plasma-localerc ] &&
+     cmp -s /etc/skel/.config/plasma-localerc "$config/plasma-localerc"; then stock=1; fi
+  # Only an app language change should replace a language chosen inside KDE.
+  if [ "${1:-}" = force ] ||
+     { [ ! -f "$stamp" ] && { [ ! -f "$config/plasma-localerc" ] || [ "$stock" = 1 ]; }; } ||
+     { [ -f "$stamp" ] && [ "$(cat "$stamp")" != "$requested" ]; }; then
+    kwriteconfig6 --file plasma-localerc --group Formats --key LANG "${LANG:-zh_CN.UTF-8}"
+    if [ -n "${LANGUAGE:-}" ]; then
+      kwriteconfig6 --file plasma-localerc --group Translations --key LANGUAGE "$LANGUAGE"
+    else
+      kwriteconfig6 --file plasma-localerc --group Translations --key LANGUAGE --delete
+    fi
+  fi
+  printf '%s\n' "$requested" > "$stamp"
+}
+
+case ${1:-} in
+  '') configure_input ;;
+  --session) configure_input; configure_locale ;;
+  --use-app-language)
+    if [ -f "$config/droiddeck/desktop-language" ]; then
+      saved=$(cat "$config/droiddeck/desktop-language")
+      export LANG="${saved%%|*}" LANGUAGE="${saved#*|}"
+    fi
+    configure_locale force
+    echo '已应用 DroidDeck 语言选择；请退出并重新进入桌面。'
+    ;;
+  --check) check_support ;;
+  --interactive) install_interactive ;;
+  *) echo 'Usage: droiddeck-chinese-setup [--session|--check|--interactive|--use-app-language]' >&2; exit 2 ;;
+esac

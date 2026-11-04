@@ -1,4 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="custom_app_name">DroidDeck 定制版</string>
+    <string name="custom_clipboard_too_large">文本超过 1 MiB UTF-8 剪贴板上限，未同步。请分段复制。</string>
+    <string name="custom_clipboard_android_rejected">Android 未能接收这段剪贴板文本，可能超过系统限制；Linux 桌面内仍可粘贴。</string>
 </resources>

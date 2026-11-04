@@ -167,12 +167,12 @@ static void reader_finish(struct reader *r) {
 static int on_reader_readable(int fd, uint32_t mask, void *data) {
     struct reader *r = data;
     for (;;) {
-        if (r->len >= CLIP_MAX_BYTES) {
+        if (r->len > CLIP_MAX_BYTES) {
             droiddeck_log("clipboard", "guest text exceeds %d bytes; dropped", CLIP_MAX_BYTES);
             reader_free(r);
             return 0;
         }
-        size_t room = CLIP_MAX_BYTES - r->len, chunk = room < 65536 ? room : 65536;
+        size_t room = CLIP_MAX_BYTES + 1 - r->len, chunk = room < 65536 ? room : 65536;
         char *nb = realloc(r->buf, r->len + chunk);
         if (!nb) { reader_free(r); return 0; }
         r->buf = nb;
@@ -460,6 +460,12 @@ static void bind_data_control_manager(struct wl_client *c, void *data, uint32_t 
 
 
 void clipboard_host_text(char *utf8, size_t len) {
+    if (len > CLIP_MAX_BYTES) {
+        droiddeck_log("clipboard", "Android text exceeds %d bytes; guest clipboard cleared", CLIP_MAX_BYTES);
+        free(utf8);
+        utf8 = NULL;
+        len = 0;
+    }
     if (len && g_last_guest_text && len == g_last_guest_len && !memcmp(utf8, g_last_guest_text, len)) {
         free(utf8);
         return;

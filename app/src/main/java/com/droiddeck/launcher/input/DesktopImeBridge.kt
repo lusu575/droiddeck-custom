@@ -4,6 +4,7 @@ import android.content.Context
 import android.net.LocalSocket
 import android.net.LocalSocketAddress
 import android.system.Os
+import android.system.OsConstants
 import org.json.JSONObject
 import java.io.File
 import java.util.UUID
@@ -27,6 +28,7 @@ internal class DesktopImeBridge(context: Context) {
             if (expectedToken != null && (!state.optBoolean("textField") || token != expectedToken)) return true
             if (!state.optBoolean("textField") || token.isEmpty()) false else {
                 val value = if (operation == "preedit") preview(text) else text
+                if ("\u0000" in value) return true
                 if (value.toByteArray(Charsets.UTF_8).size > 1024 * 1024) return false
                 val payload = JSONObject().put("token", token).put("operation", operation)
                 if (value.length > 700) {
@@ -35,14 +37,23 @@ internal class DesktopImeBridge(context: Context) {
                     Os.open(file.path, android.system.OsConstants.O_WRONLY or android.system.OsConstants.O_CREAT or
                         android.system.OsConstants.O_EXCL, 0x180).let { fd ->
                         try {
-                            java.io.FileOutputStream(fd).use { it.write(value.toByteArray(Charsets.UTF_8)) }
+                            val bytes = value.toByteArray(Charsets.UTF_8)
+                            var offset = 0
+                            while (offset < bytes.size) {
+                                val count = Os.write(fd, bytes, offset, bytes.size - offset)
+                                check(count > 0)
+                                offset += count
+                            }
                         } finally { Os.close(fd) }
                     }
                     payload.put("file", file.name)
                 } else payload.put("text", value)
                 LocalSocket(LocalSocket.SOCKET_DGRAM).use { socket ->
                     socket.connect(LocalSocketAddress(File(dir, "ime.sock").path, LocalSocketAddress.Namespace.FILESYSTEM))
-                    socket.outputStream.write(payload.toString().toByteArray(Charsets.UTF_8))
+                    val flags = Os.fcntlInt(socket.fileDescriptor, OsConstants.F_GETFL, 0)
+                    Os.fcntlInt(socket.fileDescriptor, OsConstants.F_SETFL, flags or OsConstants.O_NONBLOCK)
+                    val bytes = payload.toString().toByteArray(Charsets.UTF_8)
+                    check(Os.write(socket.fileDescriptor, bytes, 0, bytes.size) == bytes.size)
                     sent = true
                 }
                 true

@@ -1,0 +1,165 @@
+#!/usr/bin/env python3
+"""KDE menu integration for the installed assistant launcher."""
+import contextlib
+import io
+import os
+from pathlib import Path
+import runpy
+import shutil
+import subprocess
+import sys
+import tempfile
+
+LAUNCHER_PATH = Path(__file__).resolve().with_name('droiddeck-assistant')
+LAUNCHER = runpy.run_path(str(LAUNCHER_PATH), run_name='assistant_library')
+MENU_PATH = '/usr/local/bin/droiddeck-assistant-menu'
+TITLES = {'codex-desktop': 'Codex 桌面', 'chatgpt': 'ChatGPT', 'doctor': 'AI 助手环境检查'}
+
+
+def setup():
+    root = Path(os.environ.get('XDG_DATA_HOME') or Path.home() / '.local/share')
+    if not root.is_absolute():
+        raise ValueError('XDG_DATA_HOME 必须是绝对路径。')
+    directory = root / 'applications'
+    directory.mkdir(parents=True, exist_ok=True)
+    for mode, title in TITLES.items():
+        path = directory / f'droiddeck-assistant-{mode}.desktop'
+        content = ('[Desktop Entry]\nType=Application\n'
+                   f'Name={title}\nComment=启动已安装应用或检查本地环境，不修改授权与沙箱\n'
+                   f'Exec={MENU_PATH} {mode}\nTryExec={MENU_PATH}\n'
+                   'Icon=applications-development\nTerminal=false\n'
+                   'Categories=Development;Utility;\nX-DroidDeck-Assistant=true\n')
+        try:
+            with path.open('x', encoding='utf-8') as stream:
+                stream.write(content)
+        except FileExistsError:
+            pass
+    return 0
+
+
+def show_error(message):
+    print(message, file=sys.stderr)
+    dialog = shutil.which('kdialog')
+    if dialog:
+        subprocess.call([dialog, '--title', 'DroidDeck AI 助手', '--error', message])
+    elif shutil.which('konsole'):
+        subprocess.call([shutil.which('konsole'), '--hold', '-e', sys.executable,
+                         '-c', 'import sys; print(sys.argv[1])', message])
+    elif shutil.which('notify-send'):
+        subprocess.call([shutil.which('notify-send'), 'DroidDeck AI 助手', message])
+    return 2
+
+
+def show_doctor():
+    dialog = shutil.which('kdialog')
+    if not dialog:
+        terminal = shutil.which('konsole')
+        if terminal:
+            return subprocess.call([terminal, '--hold', '-e', str(LAUNCHER_PATH), '--workspace',
+                                    str(Path.home()), '--check-tools', 'doctor'])
+        return show_error('环境检查需要 kdialog 或 konsole；当前桌面缺少结果显示工具。')
+    output = io.StringIO()
+    with contextlib.redirect_stdout(output):
+        status = LAUNCHER['diagnose'](str(Path.home()), run_checks=True)
+    with tempfile.NamedTemporaryFile(mode='w', encoding='utf-8', suffix='.txt') as report:
+        report.write('本地基础检查：通过不代表 Codex 沙箱、PRoot、浏览器或 MCP 可用。\n'
+                     '程序缺失或检查失败时，请查看下面的 toolChecks；不会自动安装或关闭沙箱。\n\n')
+        report.write(output.getvalue())
+        report.flush()
+        subprocess.call([dialog, '--title', TITLES['doctor'], '--textbox', report.name, '900', '650'])
+    return status
+
+
+def terminal_choice(candidates):
+    print('选择已安装应用（名称不代表官方认证；保留应用原有设置）：')
+    for index, (_, _, label) in enumerate(candidates, 1):
+        print(f'{index}. {label}')
+    try:
+        answer = input('输入序号并回车启动，直接回车取消：').strip()
+        if not answer:
+            return None
+        index = int(answer) - 1
+        if not 0 <= index < len(candidates):
+            raise ValueError('invalid selection')
+        return index
+    except (EOFError, KeyboardInterrupt):
+        return None
+    except ValueError:
+        print('选择无效，未启动任何应用。')
+        return None
+
+
+def launch(mode, terminal_select=False):
+    keyword = 'codex' if mode == 'codex-desktop' else 'chatgpt'
+    candidates = []
+    program = shutil.which(mode)
+    if program:
+        candidates.append((program, None, f'{TITLES[mode]} ({program})'))
+    for entry in LAUNCHER['desktop_apps']():
+        if keyword in (entry['name'] + ' ' + entry['id']).lower() and not entry['noDisplay']:
+            candidates.append((None, entry['path'], f"{entry['name']} ({entry['id']})"))
+    if not candidates:
+        return show_error(f'未找到已安装的 {TITLES[mode]}。\n'
+                          '请先自行安装来源可信、与此设备架构兼容的 Linux 客户端。\n'
+                          '若已经安装，请确认它有正常的桌面应用入口。\n'
+                          '此入口不会下载、登录或关闭沙箱；可从菜单打开“AI 助手环境检查”。')
+    dialog = shutil.which('kdialog')
+    if terminal_select:
+        index = terminal_choice(candidates)
+        if index is None:
+            return 0
+    elif not dialog:
+        terminal = shutil.which('konsole')
+        if terminal:
+            return subprocess.call([terminal, '--hold', '-e', sys.executable,
+                                    str(Path(__file__).resolve()), 'terminal-select', mode])
+        return show_error('缺少 kdialog 和 konsole，无法显示应用选择；未启动任何应用。')
+    else:
+        choices = [dialog, '--title', TITLES[mode], '--menu',
+                   '选择已安装应用（名称不代表官方认证；保留应用原有设置）：']
+        for index, (_, _, label) in enumerate(candidates):
+            choices.extend([str(index), label])
+        selection = subprocess.run(choices, capture_output=True, text=True)
+        if selection.returncode != 0:
+            return 0
+        try:
+            index = int(selection.stdout.strip())
+            if index < 0 or index >= len(candidates):
+                raise ValueError('invalid selection')
+        except ValueError:
+            return show_error('应用选择无效，请重新打开菜单。')
+    executable, desktop_file, _ = candidates[index]
+    args, env = LAUNCHER['command'](mode, [], executable=executable, desktop_file=desktop_file)
+    workspace = LAUNCHER['workspace_path'](str(Path.home()))
+    env['PWD'] = str(workspace)
+    status = subprocess.call(args, env=env, cwd=str(workspace))
+    if status:
+        return show_error(f'{TITLES[mode]} 启动进程返回错误 {status}。\n'
+                          '请查看“AI 助手环境检查”，并检查客户端架构和应用日志。\n'
+                          '启动器没有关闭 Electron 或 Codex 沙箱，也不会自动用不安全参数重试。')
+    return 0
+
+
+def main(arguments):
+    try:
+        if (len(arguments) == 2 and arguments[0] == 'terminal-select' and
+                arguments[1] in ('codex-desktop', 'chatgpt')):
+            return launch(arguments[1], terminal_select=True)
+        if len(arguments) != 1:
+            raise ValueError('Use setup, doctor, codex-desktop or chatgpt.')
+        if arguments[0] == 'setup':
+            return setup()
+        if arguments[0] == 'doctor':
+            return show_doctor()
+        if arguments[0] in ('codex-desktop', 'chatgpt'):
+            return launch(arguments[0])
+        raise ValueError('Use setup, doctor, codex-desktop or chatgpt.')
+    except (OSError, ValueError) as error:
+        if arguments == ['setup']:
+            print(f'droiddeck-assistant-menu: {error}', file=sys.stderr)
+            return 2
+        return show_error(str(error))
+
+
+if __name__ == '__main__':
+    sys.exit(main(sys.argv[1:]))

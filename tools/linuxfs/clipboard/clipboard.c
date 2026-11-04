@@ -156,6 +156,7 @@ int main(int argc, char **argv) {
     Atom clipboard = XInternAtom(d, "CLIPBOARD", 0);
     Atom targets = XInternAtom(d, "TARGETS", 0), utf8 = XInternAtom(d, "UTF8_STRING", 0);
     Atom plain = XInternAtom(d, "text/plain;charset=utf-8", 0), text_atom = XInternAtom(d, "TEXT", 0);
+    Atom plain_untyped = XInternAtom(d, "text/plain", 0);
     Atom string = XInternAtom(d, "STRING", 0), incr = XInternAtom(d, "INCR", 0);
     char parent[PATH_MAX];
     if (strlen(argv[1]) >= sizeof(parent)) return 1;
@@ -179,11 +180,11 @@ int main(int argc, char **argv) {
             if (r->selection == clipboard && text && len) {
                 size_t ascii; for (ascii = 0; ascii < len && (unsigned char)text[ascii] < 128; ascii++) {}
                 if (r->target == targets) {
-                    Atom supported[] = {targets, utf8, plain, text_atom, string};
+                    Atom supported[] = {targets, utf8, plain, plain_untyped, text_atom, string};
                     XChangeProperty(d, r->requestor, property, 4  , 32, 0,
-                                    (const unsigned char *)supported, ascii == len ? 5 : 4);
+                                    (const unsigned char *)supported, ascii == len ? 6 : 5);
                     reply.selection.property = property;
-                } else if (r->target == utf8 || r->target == plain || r->target == text_atom) {
+                } else if (r->target == utf8 || r->target == plain || r->target == plain_untyped || r->target == text_atom) {
                     if (len > CHUNK_SIZE) {
                         if (start_transfer(d, r->requestor, property, utf8, incr, text, len)) reply.selection.property = property;
                     } else {

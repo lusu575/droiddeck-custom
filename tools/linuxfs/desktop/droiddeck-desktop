@@ -7,8 +7,16 @@ unset QT_QPA_PLATFORMTHEME
 export QT_FORCE_STDERR_LOGGING=1
 export MOZ_ENABLE_WAYLAND=1 MOZ_USE_XINPUT2=1
 export SHELL=/bin/bash
-export XMODIFIERS=@im=fcitx
-/usr/local/bin/droiddeck-chinese-setup
+export LANG=${LANG:-zh_CN.UTF-8}
+if [ -z "${LANGUAGE+x}" ] && [[ "$LANG" == zh_CN* ]]; then export LANGUAGE=zh_CN:zh; fi
+if command -v fcitx5 >/dev/null 2>&1; then
+  export XMODIFIERS=${XMODIFIERS:-@im=fcitx}
+  export GTK_IM_MODULE=${GTK_IM_MODULE:-fcitx} QT_IM_MODULE=${QT_IM_MODULE:-fcitx}
+fi
+/usr/local/bin/droiddeck-chinese-setup --session
+if [ -x /usr/local/bin/droiddeck-assistant-menu ]; then
+  /usr/local/bin/droiddeck-assistant-menu setup || echo 'Assistant menu setup failed; existing desktop entries are unchanged.' >&2
+fi
 export MOZ_DISABLE_CONTENT_SANDBOX=1 MOZ_DISABLE_GMP_SANDBOX=1 MOZ_DISABLE_RDD_SANDBOX=1
 export MOZ_DISABLE_SOCKET_PROCESS_SANDBOX=1 MOZ_DISABLE_UTILITY_SANDBOX=1
 export MOZ_SHM_NO_SEALS=1
@@ -33,13 +41,6 @@ export BL_DESKTOP=1
 ln -sf /usr/local/bin/droiddeck-steam-launch /usr/local/bin/steamdeck-steam 2>/dev/null
 ln -sf /usr/local/bin/droiddeck-steam-shim /usr/local/bin/steam 2>/dev/null
 python3 /usr/local/bin/droiddeck-desktop-games 2>&1 | sed 's/^/[games] /'
-# startplasma applies this file over the session environment, and keeps what an earlier session wrote.
-kwriteconfig6 --file plasma-localerc --group Formats --key LANG "${LANG:-C.UTF-8}"
-if [ -n "${LANGUAGE:-}" ]; then
-  kwriteconfig6 --file plasma-localerc --group Translations --key LANGUAGE "$LANGUAGE"
-else
-  kwriteconfig6 --file plasma-localerc --group Translations --key LANGUAGE --delete
-fi
 cat > /usr/share/applications/droiddeck-steam-x64.desktop <<'ENTRY'
 [Desktop Entry]
 Type=Application

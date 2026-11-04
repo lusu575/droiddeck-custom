@@ -6,7 +6,7 @@
 
 2026-11-04 已成功构建第一份定制测试 APK，源码提交 `850f5459f46690a3b4fc63944afe7bc7b017250c`。在 [成功构建记录](https://github.com/lusu575/droiddeck-custom/actions/runs/41768860781) 的 Artifacts 中下载 `droiddeck-custom-test-apk` 并解压，得到 APK。该 artifact 保留至 2026-12-04。
 
-测试包约 **158.8 MB**，使用独立包名，保留官方原版。这是待真机验收的测试版本；编译与单元测试通过，不代表所有中文输入场景或 Codex 工具均已适配。
+上次成功的 custom1 测试包约 **158.8 MB**，使用独立包名，保留官方原版。当前源码正在验证 **custom2** 的中文与助手改进，请以对应提交的 Actions 结果确认新版是否可下载。编译与单元测试通过，不代表所有中文输入场景或 Codex 工具均已适配。
 
 源码基线：Droid-Deck/DroidDeck `f3650d3d379f32a0d33e7a24249ae76023eab8bc`。
 
@@ -14,7 +14,8 @@
 - 改进 Android 输入法到 KDE 的中文提交与预编辑通道，保护焦点切换，避免长串输入在传输时被截断。
 - Xwayland 剪贴板增加 INCR 分块传输，单次上限 1 MiB UTF-8，补充长中文及 emoji 测试。
 - 增加中文字体与 Fcitx5 拼音的桌面构建配置。依赖安装、候选窗和各客户端实际行为仍需构建及真机验证。
-- 增加 Codex CLI、Codex 桌面、ChatGPT 的已有客户端启动入口和环境诊断。不会自动登录、上传账户资料或关闭 Codex 的授权／沙箱。
+- 增加 Codex CLI、Codex 桌面、ChatGPT 的已有客户端启动入口、KDE 菜单和环境诊断。默认不强制 X11、禁用 GPU 或关闭 Electron 沙箱，不会自动登录、上传账户资料或关闭 Codex 的授权／沙箱。
+- custom2 改进：中文支持检查/确认后补装菜单；保留 KDE 用户语言设置；完整 Unicode 输入和有序长文本；1 MiB 边界修正与 Android 剪贴板拒收提示。详见 [新版说明](docs/custom/CUSTOM2.md)。
 - 定制包名为 `com.droiddeck.custom`，官方原版为 `com.droiddeck.launcher`，两者并存，不要求覆盖或卸载原版。
 
 本轮**不内嵌整个 Linux 环境、桌面或 Wine／Proton／FEX 兼容层**，继续使用原项目的下载安装更新流程。红警与触控专项适配暂不开展。

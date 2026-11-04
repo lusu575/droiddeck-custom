@@ -115,7 +115,7 @@ class InputBridge:
                         fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
                         with os.fdopen(fd, "rb") as handle:
                             info = os.fstat(handle.fileno())
-                            if not stat.S_ISREG(info.st_mode) or info.st_size > 1024 * 1024:
+                            if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1 or info.st_size > 1024 * 1024:
                                 continue
                             raw = handle.read(1024 * 1024 + 1)
                         text = raw.decode("utf-8") if len(raw) <= 1024 * 1024 else None

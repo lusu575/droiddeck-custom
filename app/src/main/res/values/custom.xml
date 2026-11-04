@@ -1,4 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="custom_app_name">DroidDeck Custom</string>
+    <string name="custom_clipboard_too_large">Text exceeds the 1 MiB UTF-8 clipboard limit and was not synchronized. Split it into smaller parts.</string>
+    <string name="custom_clipboard_android_rejected">Android could not accept this clipboard text. It may exceed the system limit; pasting within the Linux desktop is still available.</string>
 </resources>

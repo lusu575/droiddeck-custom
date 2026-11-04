@@ -22,7 +22,7 @@
 - Xwayland 剪贴板上限从 64 KiB 提高到 1 MiB，超过单次属性大小的文本走 ICCCM INCR 分块传输。传输使用内容快照，具备并发限制和超时回收，不把中文作为 shell 命令执行。
 - 新安装默认选择简体中文，仍可在原语言设置切换其他语言或跟随系统。既有用户的明确选择不被覆盖。
 - 中文字体配置增加 Noto Sans CJK SC；Ubuntu/Arch 桌面构建清单加入 Noto CJK、Fcitx5 拼音及相关前端。首次启动创建拼音配置，保留已有输入法配置。Fcitx5 的 Wayland 输入法插件关闭以避免抢占现有 Android→KDE 通道，XIM 用于传统 X11 客户端。
-- `droiddeck-assistant doctor` 输出架构、现有程序、显示、D-Bus、语言及工作目录读写诊断；`droiddeck-assistant codex ...` 转交已有 Codex 命令，保持授权与沙箱默认；`droiddeck-assistant chatgpt ...` 只对该 Electron 进程添加已有场景所需的兼容参数。不会下载客户端、登录或放宽 Codex 工具权限。
+- `droiddeck-assistant doctor` 输出架构、现有程序、显示、D-Bus、语言、图形环境及工作目录诊断，可显式运行本地工具检查。Codex/ChatGPT 桌面入口支持已安装程序发现，默认不再关闭 Electron 沙箱、强制 X11 或禁用 GPU；既有桌面软件渲染环境仍会保留，不代表硬件加速已验证。不会下载客户端、登录或放宽 Codex 工具权限。详见 [启动与诊断说明](assistant-launcher.md)。
 - 用户最新决定不内嵌环境。本轮离线打包入口、catalog 改动与打包脚本已移除，继续原版官方下载/安装/更新路径。
 - 定制应用使用独立包名 `com.droiddeck.custom` 和“DroidDeck 定制版”名称，保留原源码 namespace/JNI 路径。与官方 `com.droiddeck.launcher` 可并存，私有应用数据隔离；未连接设备、覆盖、卸载或迁移原版数据。
 

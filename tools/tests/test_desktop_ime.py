@@ -175,6 +175,51 @@ class ImeUnicodeBridgeTest(unittest.TestCase):
             self.assertEqual(self.deliver([command], directory=directory), [])
             self.assertFalse(path.exists())
 
+    def test_cancel_preedit_clears_without_committing(self):
+        sent = self.deliver([self.command("preedit", "")])
+        self.assertEqual(sent, [(100, 4, struct.pack("<i", 0)),
+                                (100, 2, struct.pack("<I", 42) + wl_string("") + wl_string(""))])
+
+    def test_file_at_byte_limit_preserves_all_unicode(self):
+        text = "😊" * (1024 * 1024 // 4)
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / ("input-" + "b" * 32 + ".json")
+            path.write_text(text)
+            command = json.dumps(dict(operation="commit", token="focused", file=path.name)).encode()
+            sent = self.deliver([command], directory=directory)
+            rebuilt = "".join(self.scope["read_string"](payload, 4)[0]
+                              for _, opcode, payload in sent if opcode == 1)
+            self.assertEqual(rebuilt, text)
+            self.assertFalse(path.exists())
+
+    def test_oversized_file_is_removed_without_committing(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / ("input-" + "c" * 32 + ".json")
+            path.write_bytes(b"x" * (1024 * 1024 + 1))
+            command = json.dumps(dict(operation="commit", token="focused", file=path.name)).encode()
+            self.assertEqual(self.deliver([command], directory=directory), [])
+            self.assertFalse(path.exists())
+
+    def test_symlink_and_hardlink_do_not_expose_target(self):
+        with tempfile.TemporaryDirectory() as directory:
+            target = Path(directory) / "private.txt"
+            target.write_text("not input")
+            path = Path(directory) / ("input-" + "d" * 32 + ".json")
+            command = json.dumps(dict(operation="commit", token="focused", file=path.name)).encode()
+            for link in (lambda: path.symlink_to(target), lambda: os.link(target, path)):
+                link()
+                self.assertEqual(self.deliver([command], directory=directory), [])
+                self.assertFalse(path.exists())
+                self.assertEqual(target.read_text(), "not input")
+
+    def test_fifo_is_rejected_without_waiting_for_a_writer(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / ("input-" + "e" * 32 + ".json")
+            os.mkfifo(path)
+            command = json.dumps(dict(operation="commit", token="focused", file=path.name)).encode()
+            self.assertEqual(self.deliver([command], directory=directory), [])
+            self.assertFalse(path.exists())
+
 
 if __name__ == "__main__":
     unittest.main()

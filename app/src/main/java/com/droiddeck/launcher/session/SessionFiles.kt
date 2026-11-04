@@ -30,6 +30,7 @@ object SessionFiles {
         "usr/local/bin/droiddeck-ime" to "usr/local/bin/droiddeck-ime",
         "usr/local/bin/droiddeck-chinese-setup" to "usr/local/bin/droiddeck-chinese-setup",
         "usr/local/bin/droiddeck-assistant" to "usr/local/bin/droiddeck-assistant",
+        "usr/local/bin/droiddeck-assistant-menu" to "usr/local/bin/droiddeck-assistant-menu",
         "usr/local/bin/kwin_wayland_wrapper" to "usr/local/bin/kwin_wayland_wrapper",
         "usr/lib/firefox/defaults/pref/droiddeck.js" to "usr/lib/firefox/defaults/pref/droiddeck.js",
         "etc/xdg/autostart/droiddeck-clipboard.desktop" to "etc/xdg/autostart/droiddeck-clipboard.desktop",
