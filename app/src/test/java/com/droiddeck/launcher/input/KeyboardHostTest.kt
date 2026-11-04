@@ -236,5 +236,19 @@ class KeyboardHostTest {
         } finally { state.delete() }
     }
 
+    @Test fun fallbackPreservesMixedUnicodeEvenWhenKeyMapCannotRepresentIt() {
+        val events = mutableListOf<KeyEvent>()
+        val input = capturingHost(events).onCreateInputConnection(EditorInfo())!!
+        val text = "A中é😊𠮷"
+        assertTrue(input.commitText(text, 1))
+        idle()
+        val characters = events.filter { it.action == KeyEvent.ACTION_DOWN && it.unicodeChar != 0 }
+            .map { it.unicodeChar }
+        assertEquals(listOf(0x41, 0x4e2d, 0xe9, 0x1f60a, 0x20bb7), characters)
+        assertTrue(characters.none { it in 0xd800..0xdfff })
+        assertEquals(characters, events.filter { it.action == KeyEvent.ACTION_UP && it.unicodeChar != 0 }
+            .map { it.unicodeChar })
+    }
+
     private fun idle() = shadowOf(Looper.getMainLooper()).idle()
 }

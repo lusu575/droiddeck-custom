@@ -247,7 +247,13 @@ class KeyboardHost(
                     }
                     is PendingInput.Text -> {
                         val cp = pending.value.codePointAt(pending.offset)
-                        val events = map.getEvents(Character.toChars(cp))
+                        // KeyCharacterMap maps UTF-16 chars, not supplementary code points.
+                        val events = if (Character.isSupplementaryCodePoint(cp)) null else
+                            map.getEvents(charArrayOf(cp.toChar()))?.takeIf { candidate ->
+                                candidate.none { it.keyCode == KeyEvent.KEYCODE_UNKNOWN } &&
+                                    candidate.filter { it.action == KeyEvent.ACTION_DOWN }
+                                        .map { it.unicodeChar }.filter { it != 0 } == listOf(cp)
+                            }
                         if (events != null) events.forEach { this@KeyboardHost.sendKeyEvent(it) }
                         else {
                             val t = System.currentTimeMillis()

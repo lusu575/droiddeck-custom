@@ -6,7 +6,8 @@
 
 - 新安装默认简体中文，系统会话设置 GTK/Qt/XIM 输入环境；应用语言变化时同步 KDE，之后保留用户在 KDE 中选择的语言与输入法设置。
 - KDE 菜单“中文支持检查与安装”检查旧下载环境的中文字体、locale 和 Fcitx。默认启动不联网；用户明确确认后通过已配置的发行版软件源补装并保留包管理器原生确认。Arch 会提示需要完整系统更新。完成后退出并重进桌面。
-- Android 输入按完整 Unicode code point 处理，改善 emoji 和扩展汉字；长文按批发送，避免一次循环阻塞界面。确认、取消、合成退格、连接关闭及切焦点均有针对性保护。
+- Android 输入在发送端按完整 Unicode code point 处理，避免把 emoji 和扩展汉字拆成两个 surrogate；长文按批发送，避免一次循环阻塞界面。确认、取消、合成退格、连接关闭及切焦点均有针对性保护。
+- 这不代表所有窗口都能直接接收 Android IME 中文。Android→KDE 输入依赖有效的 desktop IME bridge 和目标应用的文本输入支持；主 SessionActivity 在没有 bridge 时只剩 evdev 按键路径，不能保证传递任意中文或 emoji。系统中文还依赖正确配置的 Fcitx、GTK/Qt/XIM 前端与字体环境。遇到不兼容窗口，可使用 Linux 内的 Fcitx 输入或系统剪贴板粘贴，并按应用实际验证。详见[输入测试与能力边界](../testing/custom2-text-input.md)。
 - 系统剪贴板统一上限为 1 MiB UTF-8；修复 Wayland 恰好达到上限时被误拒绝的边界，X11 支持 INCR 长文传输和 text/plain 请求。不静默截断；超限提示分段。Android 系统自身可能有更小的 IPC 限制，拒收时提示而不使会话崩溃，Linux 内部粘贴不因此失效。
 
 ## ChatGPT / Codex
