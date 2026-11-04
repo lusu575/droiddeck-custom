@@ -1,0 +1,14 @@
+gradle.beforeProject { app ->
+    if (app.path == ':app') {
+        app.afterEvaluate {
+            if (!app.plugins.hasPlugin('com.android.application')) return
+            def assets = app.layout.buildDirectory.dir('customPackAssets')
+            def stage = app.tasks.register('stageCustomPacks', Sync) {
+                from(app.layout.buildDirectory.dir('packs')) { include '*.tar.zst' }
+                into(assets.map { it.dir('packs') })
+            }
+            app.android.sourceSets.main.assets.srcDir(assets)
+            app.tasks.matching { it.name == 'preBuild' }.configureEach { dependsOn(stage) }
+        }
+    }
+}

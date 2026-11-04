@@ -1,0 +1,219 @@
+#!/usr/bin/env python3
+import json
+import os
+import re
+import select
+import socket
+import struct
+import stat
+import sys
+import time
+import uuid
+
+DISPLAY_ID = 1
+REGISTRY_ID = 2
+METHOD_ID = 3
+SETTLE = 0.15
+
+
+def wl_string(value):
+    data = value.encode() + b"\0"
+    return struct.pack("<I", len(data)) + data + b"\0" * (-len(data) % 4)
+
+
+def read_string(payload, offset):
+    (length,) = struct.unpack_from("<I", payload, offset)
+    start = offset + 4
+    text = payload[start:start + length - 1].decode(errors="replace")
+    return text, start + length + (-length % 4)
+
+
+class Connection:
+    def __init__(self, sock):
+        self.sock = sock
+        self.buffer = b""
+
+    def send(self, obj, opcode, payload=b""):
+        self.sock.sendall(struct.pack("<II", obj, ((8 + len(payload)) << 16) | opcode) + payload)
+
+    def messages(self, timeout):
+        ready, _, _ = select.select([self.sock], [], [], timeout)
+        if not ready:
+            return []
+        data, _, _, _ = self.sock.recvmsg(65536, socket.CMSG_SPACE(16 * 4))
+        if not data:
+            raise EOFError
+        self.buffer += data
+        out = []
+        while len(self.buffer) >= 8:
+            obj, word = struct.unpack_from("<II", self.buffer)
+            size = word >> 16
+            if size < 8 or len(self.buffer) < size:
+                break
+            out.append((obj, word & 0xFFFF, self.buffer[8:size]))
+            self.buffer = self.buffer[size:]
+        return out
+
+
+class Report:
+    def __init__(self, directory):
+        self.directory = directory
+        self.seq = 0
+        self.sent = None
+        self.focus_token = ""
+
+    def write(self, field, hint=0, purpose=0):
+        state = (field, purpose, self.focus_token)
+        if state == self.sent or not self.directory:
+            return
+        self.sent = state
+        self.seq += 1
+        os.makedirs(self.directory, exist_ok=True)
+        target = os.path.join(self.directory, "ime.json")
+        temp = target + ".tmp"
+        fd = os.open(temp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        with os.fdopen(fd, "w") as handle:
+            json.dump({"textField": field, "hint": hint, "purpose": purpose, "seq": self.seq, "focusToken": self.focus_token}, handle)
+        os.replace(temp, target)
+        print(f"droiddeck-ime: text field {'focused' if field else 'left'}", file=sys.stderr, flush=True)
+
+
+class InputBridge:
+    def __init__(self, directory):
+        self.sock = None
+        self.directory = directory
+        if directory:
+            os.makedirs(directory, mode=0o700, exist_ok=True)
+            path = os.path.join(directory, "ime.sock")
+            try:
+                os.unlink(path)
+            except FileNotFoundError:
+                pass
+            self.sock = socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM)
+            self.sock.bind(path)
+            os.chmod(path, 0o600)
+            self.sock.setblocking(False)
+
+    def receive(self, conn, current, serial, token):
+        if self.sock is None:
+            return
+        # Keep UI event dispatch responsive even when an input method sends many updates.
+        for _ in range(32):
+            try:
+                data = self.sock.recv(16384)
+            except BlockingIOError:
+                return
+            try:
+                command = json.loads(data)
+                if not isinstance(command, dict):
+                    continue
+                text = command.get("text")
+                name = command.get("file", "")
+                if name and self.directory and re.fullmatch(r"input-[0-9a-f]{32}\.json", name):
+                    path = os.path.join(self.directory, name)
+                    try:
+                        fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+                        with os.fdopen(fd, "rb") as handle:
+                            info = os.fstat(handle.fileno())
+                            if not stat.S_ISREG(info.st_mode) or info.st_size > 1024 * 1024:
+                                continue
+                            raw = handle.read(1024 * 1024 + 1)
+                        text = raw.decode("utf-8") if len(raw) <= 1024 * 1024 else None
+                    finally:
+                        try:
+                            os.unlink(path)
+                        except FileNotFoundError:
+                            pass
+                if not current or command.get("token") != token:
+                    continue
+                if not isinstance(text, str) or "\0" in text or len(text.encode()) > 1024 * 1024:
+                    continue
+                if command.get("operation") == "commit":
+                    conn.send(current, 2, struct.pack("<I", serial) + wl_string("") + wl_string(""))
+                    for start in range(0, len(text), 700):
+                        conn.send(current, 1, struct.pack("<I", serial) + wl_string(text[start:start + 700]))
+                elif command.get("operation") == "preedit":
+                    text = text[:700]
+                    conn.send(current, 4, struct.pack("<i", len(text.encode())))
+                    conn.send(current, 2, struct.pack("<I", serial) + wl_string(text) + wl_string(""))
+            except (ValueError, KeyError, TypeError, UnicodeError, OSError):
+                continue
+
+
+def connect():
+    fd = os.environ.pop("WAYLAND_SOCKET", "")
+    if fd.isdigit():
+        return socket.socket(socket.AF_UNIX, socket.SOCK_STREAM, fileno=int(fd))
+    sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    sock.connect(os.path.join(os.environ["XDG_RUNTIME_DIR"], os.environ.get("WAYLAND_DISPLAY", "wayland-0")))
+    return sock
+
+
+def main():
+    launch = os.environ.get("BL_LAUNCH_DIR", "")
+    report = Report(os.environ.get("BL_IME_DIR") or (os.path.join(launch, "agent") if launch else ""))
+    try:
+        bridge = InputBridge(report.directory)
+    except OSError as error:
+        print(f"droiddeck-ime: Unicode bridge unavailable: {error}", file=sys.stderr, flush=True)
+        bridge = InputBridge("")
+    conn = Connection(connect())
+    conn.send(DISPLAY_ID, 1, struct.pack("<I", REGISTRY_ID))
+    contexts = {}
+    current = None
+    serial = 0
+    pending = None
+    while True:
+        timeout = None if pending is None else max(0.0, pending - time.monotonic())
+        try:
+            waiting = [conn.sock] + ([bridge.sock] if bridge.sock else [])
+            ready, _, _ = select.select(waiting, [], [], timeout)
+            batch = conn.messages(0) if conn.sock in ready else []
+        except (EOFError, ConnectionError):
+            report.write(False)
+            return 0
+        for obj, opcode, payload in batch:
+            if obj == DISPLAY_ID and opcode == 0:
+                _, code = struct.unpack_from("<II", payload)
+                message, _ = read_string(payload, 8)
+                print(f"droiddeck-ime: protocol error {code}: {message}", file=sys.stderr, flush=True)
+                report.write(False)
+                return 1
+            if obj == REGISTRY_ID and opcode == 0:
+                (name,) = struct.unpack_from("<I", payload)
+                interface, offset = read_string(payload, 4)
+                (version,) = struct.unpack_from("<I", payload, offset)
+                if interface == "zwp_input_method_v1":
+                    conn.send(REGISTRY_ID, 0, struct.pack("<I", name) + wl_string(interface)
+                              + struct.pack("<II", min(version, 1), METHOD_ID))
+            elif obj == METHOD_ID and opcode == 0:
+                (context,) = struct.unpack_from("<I", payload)
+                contexts[context] = [0, 0]
+                current = context
+                serial = 0
+                report.focus_token = uuid.uuid4().hex if bridge.sock else ""
+                pending = None
+                report.write(True)
+            elif obj == METHOD_ID and opcode == 1:
+                (context,) = struct.unpack_from("<I", payload)
+                contexts.pop(context, None)
+                conn.send(context, 0)
+                if context == current:
+                    current = None
+                    pending = time.monotonic() + SETTLE
+            elif obj == current and opcode == 4:
+                (serial,) = struct.unpack_from("<I", payload)
+            elif obj in contexts and opcode == 2:
+                hint, purpose = struct.unpack_from("<II", payload)
+                contexts[obj] = [hint, purpose]
+                if obj == current:
+                    report.write(True, hint, purpose)
+        bridge.receive(conn, current, serial, report.focus_token)
+        if pending is not None and time.monotonic() >= pending:
+            pending = None
+            if current is None:
+                report.write(False)
+
+
+if __name__ == "__main__":
+    sys.exit(main())

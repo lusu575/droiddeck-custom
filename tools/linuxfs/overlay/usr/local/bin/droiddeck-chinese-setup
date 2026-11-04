@@ -1,0 +1,31 @@
+#!/bin/bash
+set -eu
+config=${XDG_CONFIG_HOME:-$HOME/.config}
+mkdir -p "$config/fcitx5" "$config/autostart"
+if [ ! -e "$config/fcitx5/profile" ]; then
+  cat > "$config/fcitx5/profile" <<'PROFILE'
+[Groups/0]
+Name=Default
+Default Layout=us
+DefaultIM=pinyin
+[Groups/0/Items/0]
+Name=keyboard-us
+Layout=
+[Groups/0/Items/1]
+Name=pinyin
+Layout=
+[GroupOrder]
+0=Default
+PROFILE
+fi
+if command -v fcitx5 >/dev/null 2>&1; then
+  cat > "$config/autostart/droiddeck-fcitx5.desktop" <<'ENTRY'
+[Desktop Entry]
+Type=Application
+Name=Chinese input
+Name[zh_CN]=中文输入法
+Exec=fcitx5 -d --disable=waylandim
+OnlyShowIn=KDE;
+X-KDE-autostart-after=panel
+ENTRY
+fi

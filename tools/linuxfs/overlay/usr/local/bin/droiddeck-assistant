@@ -1,0 +1,62 @@
+#!/usr/bin/env python3
+"""Launch an already installed assistant; do not download software or change agent permissions."""
+import json
+import os
+import shutil
+import subprocess
+import sys
+
+
+def diagnose():
+    programs = {name: shutil.which(name) for name in (
+        'codex', 'codex-desktop', 'chatgpt', 'git', 'python3', 'node', 'npm', 'bash', 'dbus-run-session', 'xdg-open', 'fcitx5')}
+    result = {
+        'architecture': os.uname().machine,
+        'programs': programs,
+        'display': bool(os.environ.get('DISPLAY')),
+        'wayland': bool(os.environ.get('WAYLAND_DISPLAY')),
+        'dbus': bool(os.environ.get('DBUS_SESSION_BUS_ADDRESS')),
+        'locale': os.environ.get('LANG', ''),
+        'workspaceWritable': os.access(os.getcwd(), os.W_OK),
+        'limitations': [
+            'A working window does not prove Codex shell, browser, MCP or sandbox support.',
+            'PRoot shares the Android kernel; namespace and sandbox availability must be tested on the device.',
+            'This launcher does not disable Codex approvals or its workspace sandbox.',
+        ],
+    }
+    print(json.dumps(result, ensure_ascii=False, indent=2))
+    return 0
+
+
+def command(mode, arguments):
+    if mode not in ('codex', 'codex-desktop', 'chatgpt'):
+        raise ValueError('Use doctor, codex, codex-desktop or chatgpt.')
+    program = shutil.which(mode)
+    if not program:
+        raise ValueError(f'{mode} is not installed. Install a trusted build for Linux ARM64 first.')
+    env = dict(os.environ)
+    env.setdefault('LANG', 'zh_CN.UTF-8')
+    env.setdefault('LANGUAGE', 'zh_CN:zh')
+    env.setdefault('TERM', 'xterm-256color')
+    args = [program]
+    if mode in ('codex-desktop', 'chatgpt'):
+        # The compatibility flags apply only to this Electron process, not to Codex tool permissions.
+        args += ['--no-sandbox', '--disable-gpu', '--ozone-platform=x11']
+        env.pop('WAYLAND_DISPLAY', None)
+        env['XDG_SESSION_TYPE'] = 'x11'
+    return args + arguments, env
+
+
+def main(arguments):
+    if not arguments or arguments[0] == 'doctor':
+        return diagnose()
+    try:
+        args, env = command(arguments[0], arguments[1:])
+    except ValueError as error:
+        print(error, file=sys.stderr)
+        return 2
+    return subprocess.call(args, env=env)
+
+
+if __name__ == '__main__':
+    sys.exit(main(sys.argv[1:]))
