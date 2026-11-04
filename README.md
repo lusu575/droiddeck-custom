@@ -4,7 +4,9 @@
 
 ## 当前状态
 
-已导入适用的上游源码和定制修改，处于基础验证阶段。没有把“能启动客户端”当成“所有工具调用均可用”。APK 是否构建成功，请以 [定制构建记录](https://github.com/lusu575/droiddeck-custom/actions/workflows/custom-build.yml) 中对应提交的结果为准。
+2026-11-04 已成功构建第一份定制测试 APK，源码提交 `850f5459f46690a3b4fc63944afe7bc7b017250c`。在 [成功构建记录](https://github.com/lusu575/droiddeck-custom/actions/runs/41768860781) 的 Artifacts 中下载 `droiddeck-custom-test-apk` 并解压，得到 APK。该 artifact 保留至 2026-12-04。
+
+测试包约 **158.8 MB**，使用独立包名，保留官方原版。这是待真机验收的测试版本；编译与单元测试通过，不代表所有中文输入场景或 Codex 工具均已适配。
 
 源码基线：Droid-Deck/DroidDeck `f3650d3d379f32a0d33e7a24249ae76023eab8bc`。
 
@@ -19,7 +21,7 @@
 
 ## 验证范围与限制
 
-已通过 41 项定向主机测试，以及修改涉及的 C 编译、Shell 语法、XML 和脚本部署检查。完整上游测试及 Android/KWin 端到端尚未全部通过，不应将此版本视为稳定版。
+已通过 65 项相关主机测试、3142 项 Android 单元测试（447 个套件，无失败、错误或跳过），以及 APK 包名、签名、原生库和内置引导组件校验。完整上游 Python 测试及 Android/KWin 真机端到端尚未全部完成，不应将此版本视为稳定版。
 
 Codex 的登录、内核沙箱、文件操作、终端命令、浏览器和 MCP 必须逐项验证。PRoot 共享 Android 内核，Linux 客户端打开窗口不代表全部功能可用。传统 X11 客户端与 Wayland 客户端的输入机制不同，也需要分别测试。
 
