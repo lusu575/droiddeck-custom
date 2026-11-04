@@ -44,7 +44,7 @@ class PreloadSnapshotTest(unittest.TestCase):
         (self.root / x86).parent.mkdir(parents=True, exist_ok=True)
         (self.root / x86).write_text((snapshots.ROOT / x86).read_text())
         (self.root / '.github/workflows').mkdir(parents=True)
-        (self.root / '.github/workflows/build.yml').write_text((snapshots.ROOT / '.github/workflows/build.yml').read_text())
+        (self.root / '.github/workflows/build.yml').write_text(snapshots.build_workflow())
         self.git('init', '-q')
         self.git('config', 'core.autocrlf', 'false')
         self.git('config', 'user.name', 'Test Developer')
@@ -79,6 +79,21 @@ class PreloadSnapshotTest(unittest.TestCase):
         fetch.assert_called_once()
         for name, value in self.binaries.items():
             self.assertEqual((self.root / 'app/src/main/assets/linuxfs' / name).read_bytes(), value)
+
+    def test_custom_workflow_can_replace_upstream_workflow(self):
+        upstream = self.root / '.github/workflows/build.yml'
+        upstream.rename(upstream.with_name('custom-build.yml'))
+        result, _, _ = self.restore()
+        self.assertEqual(result, dict(arm64=True, x86=True))
+
+    def test_current_custom_runner_policy_takes_precedence(self):
+        upstream = self.root / '.github/workflows/build.yml'
+        upstream.with_name('custom-build.yml').write_text(
+            upstream.read_text().replace('runs-on: ubuntu-24.04', 'runs-on: ubuntu-22.04'))
+        result, fetch, _ = self.restore()
+        self.assertEqual(result, dict(arm64=False, x86=False))
+        fetch.assert_not_called()
+        self.assertEqual(snapshots.build_workflow(self.root, self.base), upstream.read_text())
 
     def test_changed_common_source_requires_both_rebuilds(self):
         path = self.root / snapshots.COMMON[0]

@@ -34,7 +34,7 @@ jobs:
       run: echo "tree-sha=$(git rev-parse 'HEAD^{tree}')" >> "$GITHUB_OUTPUT"
     - name: Chinese input and custom identity host tests
       run: |
-        python3 -m unittest tools.tests.test_chinese_setup tools.tests.test_custom_identity tools.tests.test_desktop_ime tools.tests.test_clipboard_incr tools.tests.test_assistant_launcher tools.tests.test_droiddeck_fonts tools.tests.test_desktop_language tools.tests.test_desktop_chromium_apps tools.tests.test_session_assets -v
+        python3 -m unittest tools.tests.test_chinese_setup tools.tests.test_custom_identity tools.tests.test_desktop_ime tools.tests.test_clipboard_incr tools.tests.test_assistant_launcher tools.tests.test_droiddeck_fonts tools.tests.test_desktop_language tools.tests.test_desktop_chromium_apps tools.tests.test_session_assets tools.tests.test_preload_snapshots tools.tests.test_component_prepare -v
         git diff --check
   xbox:
     name: Xbox ARM64 backend

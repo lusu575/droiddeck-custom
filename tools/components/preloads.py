@@ -39,6 +39,16 @@ def api(path):
     return json.loads(run('gh', 'api', 'repos/' + REPO + '/' + path))
 
 
+def build_workflow(root=ROOT, commit=None):
+    for path in ('.github/workflows/custom-build.yml', '.github/workflows/build.yml'):
+        if commit:
+            if run('git', 'ls-tree', commit, path, root=root):
+                return run('git', 'show', f'{commit}:{path}', root=root).decode()
+        elif (root / path).is_file():
+            return (root / path).read_text()
+    raise ValueError('APK build workflow is missing')
+
+
 def source_files(group, root=ROOT, commit=None, patterns=None):
     patterns = patterns if patterns is not None else INPUTS[group]
     if commit:
@@ -62,8 +72,7 @@ def source_files(group, root=ROOT, commit=None, patterns=None):
         result[path] = sha(content)
         for include in re.findall(rb'^\s*#\s*include\s*"([^"\n]+)"', content, re.M):
             pending.append(posixpath.normpath(posixpath.join(posixpath.dirname(path), include.decode())))
-    workflow = (run('git', 'show', f'{commit}:.github/workflows/build.yml', root=root).decode() if commit
-                else (root / '.github/workflows/build.yml').read_text())
+    workflow = build_workflow(root, commit)
     job = 'components' if re.search(r'(?m)^  components:', workflow) else 'build'
     runner = re.search(r'(?ms)^  ' + job + r':\n.*?^    runs-on: ([^\n]+)', workflow)
     if runner is None:
