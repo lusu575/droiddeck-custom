@@ -1,7 +1,11 @@
 # DroidDeck 定制版：基础实现与验证
 
 日期：2026-11-04。基于上游提交 `f3650d3d379f32a0d33e7a24249ae76023eab8bc`。
-用户已授权将本批源码发布到个人公开仓库并尝试 GitHub Actions 构建。历史上的本地验证结果如下；是否产出 APK 以仓库对应提交的 Actions 记录为准。
+用户已授权将本批源码发布到个人公开仓库并进行 GitHub Actions 构建。最新结果见下；后面的本地记录明确标为历史，不代表当前构建状态。
+
+## custom2 云端构建结果
+
+源码 `061ca49555e53ab994acc51d36b7a1d736f80779` 的 [构建与下载](https://github.com/lusu575/droiddeck-custom/actions/runs/41779301176) 已成功。125 项相关主机测试和 3159 项 Android 单元测试（448 个套件，0 失败、0 错误、0 跳过），以及 APK 包名、签名、原生库、内置引导包校验均通过。已下载 APK 并核对 artifact 摘要。版本说明、文件哈希和限制见 [CUSTOM2](CUSTOM2.md)，真机待验清单见 [中文输入测试](../testing/custom2-text-input.md)。
 
 ## 首次云端构建结果
 
@@ -30,11 +34,11 @@
 
 这不是“所有桌面客户端和工具已适配”的结论。Codex CLI 启动入口和诊断已经实现，但本环境没有用户的 Linux ChatGPT/Codex 桌面二进制，无法验证其登录、桌面工具、浏览器工具或 MCP。官方 Codex CLI 的存在，也不能证明其 Linux 内核沙箱在 Android PRoot 下可运行。没有使用关闭审批/关闭 Codex 沙箱的参数。
 
-Android→KDE 新通道需要应用支持 KDE 文本输入协议。传统 X11 客户端仍依赖 Fcitx5/XIM、按键或剪贴板；不能声称所有 Electron/X11 应用已通过中文实测。Android Kotlin/JNI 集成、IME 长串提交性能、桌面与双屏焦点切换、输入法候选窗都仍需 Android 构建及 S26+ 基本实测。
+Android→KDE 新通道需要应用支持 KDE 文本输入协议。主 SessionActivity 无 bridge 时的 evdev 路径不支持任意 Unicode；传统 X11 客户端仍依赖 Fcitx5/XIM、可映射按键或剪贴板，不能声称所有 Electron/X11 应用已通过中文实测。Android 编译和单元测试已完成，但 IME 长串提交性能、桌面与双屏焦点切换、输入法候选窗仍需 S26+ 基本实测。
 
 长文本改善主要是系统剪贴板，**单次上限 1 MiB UTF-8**，不是无限文本；包含换行的文本粘贴到终端可能执行命令，应在编辑器测试。Wayland→Android 原有边界及 Android 剪贴板自身大小限制仍需真机验证。
 
-中文软件包必须重新构建桌面包才真正内置。仅安装本批源码构建的 APK，不会自动把旧桌面包变成带 Fcitx5/新字体的包。环境内嵌已按用户最新指令停止，不会生成离线整包。
+中文软件包可通过重新构建桌面包预装，或在旧环境中用新增“中文支持检查与安装”菜单确认后补装。仅安装 APK 不会自动把旧桌面包变成带 Fcitx5/新字体的包。环境内嵌已按用户最新指令停止，不会生成离线整包。
 
 ## 更新与体积调查
 
@@ -70,7 +74,7 @@ Android→KDE 新通道需要应用支持 KDE 文本输入协议。传统 X11 �
 - [Codex CLI 官方仓库](https://github.com/openai/codex)
 - [Fcitx5 许可目录](https://github.com/fcitx/fcitx5/tree/master/LICENSES)
 
-## 验证
+## 首轮云构建前的本地历史验证
 
 - 定向主机回归：41 项测试通过，覆盖原桌面语言/Chromium 包装、中文配置、UTF-8 提交/预编辑与错误焦点拒绝、1 MiB INCR 传输/并发保护/超时、定制包并存保护和助手启动参数。
 - `cc -Wall -Wextra -Werror` 编译剪贴板 helper 及 INCR 测试通过。
@@ -79,6 +83,6 @@ Android→KDE 新通道需要应用支持 KDE 文本输入协议。传统 X11 �
 - 全部上游 Python 测试尝试运行，但存在容器限制（socket、依赖、非 Ubuntu 系统）导致错误/失败，长时间未结束后中止；**全套测试不是通过**。
 - Gradle Android 测试没有执行：Gradle 8.10.2 尚未缓存，下载报 `Network is unreachable`。容器无 Android SDK/NDK、Docker、Rust 和 JDK 17 构建组合。没有生成可安装 APK。
 
-## 下一步基本验收
+## 下一步真机基本验收
 
-在可用云端 Android 构建环境完成源码编译、Android 单测、native 编译、桌面包构建，再由用户在 S26+ 验证：Kate/Konsole/浏览器和实际客户端中文输入；候选词确认/取消/退格；2 万字中文和中英混合/emoji 多行复制粘贴；切换字段与双屏；Codex 读取/编辑测试目录文件、运行无害命令和测试程序；按实际工具逐项检查，不默认给全部工具授权。红警与触控未改动。
+云端源码编译、Android 单测和 native 检查已经完成，完整桌面包没有在本轮内嵌。由用户在 S26+ 验证：Kate/Konsole/浏览器和实际客户端中文输入；候选词确认/取消/退格；2 万字中文和中英混合/emoji 多行复制粘贴；切换字段与双屏；Codex 读取/编辑测试目录文件、运行无害命令和测试程序；按实际工具逐项检查，不默认给全部工具授权。红警与触控未改动。

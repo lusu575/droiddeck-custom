@@ -4,9 +4,9 @@
 
 ## 当前状态
 
-2026-11-04 已成功构建第一份定制测试 APK，源码提交 `850f5459f46690a3b4fc63944afe7bc7b017250c`。在 [成功构建记录](https://github.com/lusu575/droiddeck-custom/actions/runs/41768860781) 的 Artifacts 中下载 `droiddeck-custom-test-apk` 并解压，得到 APK。该 artifact 保留至 2026-12-04。
+2026-11-04 已成功构建 **0.6.9-custom2** 测试 APK，源码提交 `061ca49555e53ab994acc51d36b7a1d736f80779`。登录 GitHub 后，在 [成功构建记录](https://github.com/lusu575/droiddeck-custom/actions/runs/41779301176) 的 Artifacts 中下载 `droiddeck-custom-test-apk` 并解压，得到 `app-debug.apk`。该 artifact 保留至 2026-12-04。
 
-上次成功的 custom1 测试包约 **158.8 MB**，使用独立包名，保留官方原版。当前源码正在验证 **custom2** 的中文与助手改进，请以对应提交的 Actions 结果确认新版是否可下载。编译与单元测试通过，不代表所有中文输入场景或 Codex 工具均已适配。
+custom2 测试包约 **158.8 MB**，使用独立包名，保留官方原版。编译与单元测试通过，不代表所有中文输入场景或 Codex 工具均已适配。测试签名每轮重新生成，不保证覆盖 custom1；如遇签名冲突，先备份定制版数据，勿卸载官方原版。
 
 源码基线：Droid-Deck/DroidDeck `f3650d3d379f32a0d33e7a24249ae76023eab8bc`。
 
@@ -22,7 +22,7 @@
 
 ## 验证范围与限制
 
-已通过 65 项相关主机测试、3142 项 Android 单元测试（447 个套件，无失败、错误或跳过），以及 APK 包名、签名、原生库和内置引导组件校验。完整上游 Python 测试及 Android/KWin 真机端到端尚未全部完成，不应将此版本视为稳定版。
+已通过 125 项相关主机测试、3159 项 Android 单元测试（448 个套件，无失败、错误或跳过），以及 APK 包名、签名、原生库和内置引导组件校验。已下载并核对 APK artifact 的 SHA-256。完整上游 Python 测试及 Android/KWin 真机端到端尚未全部完成，不应将此版本视为稳定版。
 
 Codex 的登录、内核沙箱、文件操作、终端命令、浏览器和 MCP 必须逐项验证。PRoot 共享 Android 内核，Linux 客户端打开窗口不代表全部功能可用。传统 X11 客户端与 Wayland 客户端的输入机制不同，也需要分别测试。
 

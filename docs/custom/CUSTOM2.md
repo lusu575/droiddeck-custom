@@ -1,6 +1,14 @@
 # custom2 中文与助手改进
 
-版本：0.6.9-custom2，独立应用 ID `com.droiddeck.custom`。官方版 `com.droiddeck.launcher` 保留；本轮不内嵌完整 Linux、KDE 或兼容环境。源码实现与 125 项相关主机测试已完成，最终 APK/Android 单元测试结果以对应 GitHub Actions 运行记录为准。
+版本：0.6.9-custom2，独立应用 ID `com.droiddeck.custom`。官方版 `com.droiddeck.launcher` 保留；本轮不内嵌完整 Linux、KDE 或兼容环境。
+
+## 已验证的构建
+
+2026-11-04，源码 `061ca49555e53ab994acc51d36b7a1d736f80779` 的 [GitHub Actions 构建](https://github.com/lusu575/droiddeck-custom/actions/runs/41779301176) 全部通过。125 项相关主机测试、3159 项 Android 单元测试（448 个套件）均无失败；Android 测试无错误、无跳过。APK 包名、签名、原生库及六个引导包校验通过。
+
+登录 GitHub 后下载该运行的 `droiddeck-custom-test-apk` artifact，解压得到 `app-debug.apk`。下载有效期至 2026-12-04。已实际下载并校验 ZIP 摘要与 GitHub 记录一致，APK 为 158,821,316 字节，SHA-256：`c4f64eaf7995df5c402edbc6604b7918dedfc0b87f7eeac66d77700c7415c1dc`。
+
+首轮 custom2 回归测试捕获了 Android KeyCharacterMap 将 supplementary 字符拆成 UTF-16 单元的问题。现已修复并保留原断言，另加混合 Unicode 回归；相关 15 项 KeyboardHost 测试全部通过。这里验证的是发送端与逻辑，不是全部客户端的真机输入兼容性。
 
 ## 系统中文与粘贴
 
